@@ -291,6 +291,13 @@ jobs:
           repository: pytorch/test-infra
           path: test-infra
 
+      - name: Check for suppression by label
+        id: check_label
+        if: contains(github.event.pull_request.labels.*.name, 'suppress-api-compatibility-check')
+        run: |
+          echo "API compatibility check is suppressed by label"
+          echo "suppression=--suppressed" >> "${GITHUB_OUTPUT}"
+
       - name: Build and run BC-linter
         if: steps.check_user.outputs.allowed == 'true'
         working-directory: pytorch
@@ -298,10 +305,14 @@ jobs:
           set -eux
           ../test-infra/tools/stronghold/bin/build-check-api-compatibility
 
-          # Run the BC-linter script
+          # Run the BC-linter script.
+          # The script checks for BC-breaking changes in the PR.
+          # When suppressed by label or #suppress-api-compatibility-check tag in the commit message
+          # the job will not fail and will output notices instead of warnings.
           ../test-infra/tools/stronghold/bin/check-api-compatibility \
               --base-commit=${{ github.event.pull_request.base.sha }} \
-              --head-commit=${{ github.event.pull_request.head.sha }}
+              --head-commit=${{ github.event.pull_request.head.sha }} \
+              ${{ steps.check_label.outputs.suppression }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}-${{ github.event_name == 'workflow_dispatch' }}
