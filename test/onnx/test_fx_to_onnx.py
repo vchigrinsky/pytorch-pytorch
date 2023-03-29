@@ -22,9 +22,7 @@ class TestFxToOnnx(pytorch_test_common.ExportTestCase):
 
         _ = fx_onnx.export(func, torch.randn(1, 1, 2), opset_version=self.opset_version)
 
-    @unittest.skip(
-        "Conv Op is not supported at the time. https://github.com/microsoft/onnx-script/issues/397"
-    )
+    @unittest.skip("MaxPool2D Op is not supported at the time.")
     def test_mnist(self):
         class MNISTModel(nn.Module):
             def __init__(self):
