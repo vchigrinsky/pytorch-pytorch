@@ -809,6 +809,26 @@ class PhiloxRandomState:
         cls.base_offset_arg = cls.fwd_base_offset_arg
     
     @classmethod
+    def get_current_args(cls):
+        # with disable_proxy_modes_tracing():
+        with disable_fake_tensor_mode_tracing():
+            seed_portion = cls.seed_arg.reshape([1])
+            offset_portion = cls.base_offset_arg.reshape([1])
+            return torch.cat([seed_portion, offset_portion])
+        # return PhiloxRandomState.create_rng_state_tensor(cls.seed_arg, cls.base_offset_arg)
+
+    @classmethod
+    def reset_current_args(cls, x):
+        with disable_fake_tensor_mode_tracing():
+            seed, offset = torch.split(x, 1)
+            cls.seed_arg = seed[0]
+            cls.base_offset_arg = offset[0]
+            # seed_portion = cls.seed_arg.reshape([1]).view(torch.uint8)
+            # offset_portion = cls.base_offset_arg.reshape([1]).view(torch.uint8)
+            # return torch.cat([seed_portion, offset_portion])
+ 
+
+    @classmethod
     def mark_beginning_of_backward(cls):
         cls.accumulated_fwd_offset = cls.accumulated_offset
         cls.accumulated_offset = 0

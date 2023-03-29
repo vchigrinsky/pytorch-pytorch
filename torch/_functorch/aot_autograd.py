@@ -2226,6 +2226,18 @@ def create_runtime_wrapper(
             return fw_outs
     return runtime_wrapper
 
+@contextmanager
+def patch(module, attr, patch_fn):
+    """
+    Context manager that temporarily patches attribute of a module to a given patch_fn
+    """
+    old_fn = getattr(module, attr)
+    setattr(module, attr, patch_fn)
+    try:
+        yield
+    finally:
+        setattr(module, attr, old_fn)
+
 def create_functionalized_rng_ops_wrapper(func, args, trace_joint=True):
     # Functionalization of rng ops changes the calling convention of the joint graph.
     # It goes from (primals, tangents) to (primals, tangents, seed, offset)
@@ -2235,24 +2247,26 @@ def create_functionalized_rng_ops_wrapper(func, args, trace_joint=True):
     # Partitioner logic uses the string "primals" and "tangents"
     # Even though example_seed is not used here, we will use it while
     # functionalizing the rng ops in FunctionalizeRngOpsMode
+    def override_get_rng_state(device: Union[int, str, torch.device] = 'cuda'):
+        out = PhiloxRandomState.get_current_args()
+        return out
 
+    def override_set_rng_state(x):
+        PhiloxRandomState.reset_current_args(x)
 
-
-    class PrintFunctionMode(torch.overrides.TorchFunctionMode):
-        def __torch_function__(self, func, types, args=(), kwargs={}):
-            print("HURRAY", func)
-            return func(*args, **kwargs)
-        # return func(*args, **kwargs)
 
     def traced_joint(primals, tangents, fwd_seed, fwd_base_offset, bwd_seed, bwd_base_offset):
-        with PrintFunctionMode():
-            with FunctionalizeRngOpsMode():
-                return func(primals, tangents)
+        with patch(torch.cuda, "get_rng_state", override_get_rng_state):
+            with patch(torch.cuda, "set_rng_state", override_set_rng_state):
+                with FunctionalizeRngOpsMode():
+                    out =  func(primals, tangents)
+        return out
 
     def traced_forward(*primals, fwd_seed, fwd_base_offset):
-        with PrintFunctionMode():
-            with FunctionalizeRngOpsMode():
-                return func(primals)
+        with patch(torch.cuda, "get_rng_state", override_get_rng_state):
+            with patch(torch.cuda, "set_rng_state", override_set_rng_state):
+                with FunctionalizeRngOpsMode():
+                    return func(primals)
 
     PhiloxRandomState.reset()
     # Get the current seed and offset to setup tracing.
