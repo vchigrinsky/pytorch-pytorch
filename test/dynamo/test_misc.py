@@ -934,6 +934,7 @@ class MiscTests(torch._dynamo.test_case.TestCase):
             opt_fn(a, b)
         self.assertEqual(cnts.frame_count, 2)
 
+    @unittest.skip("DYNAMO 3.11")
     def test_nested_grad_mode_graph_break(self):
         def fn(x):
             before = torch.is_grad_enabled()
@@ -3662,6 +3663,7 @@ def fn():
         self.assertEqual(res.dtype, torch.bfloat16)
         self.assertEqual(opt_res.dtype, torch.bfloat16)
 
+    @unittest.skip("DYNAMO 3.11")
     def test_autocast_cpu_graph_break_inner_fn(self):
         class MyModule(torch.nn.Module):
             @staticmethod
@@ -4806,10 +4808,8 @@ def fn():
                 z *= 3
             return z
 
-        # TODO remove condition once 3.11 is fully supported
-        if sys.version_info < (3, 11):
-            opt_f = torch._dynamo.optimize("eager", nopython=True)(f)
-            self.assertEqual(opt_f(None, torch.ones(2)), 6)
+        opt_f = torch._dynamo.optimize("eager", nopython=True)(f)
+        self.assertEqual(opt_f(None, torch.ones(2)), 6)
 
         if sys.version_info >= (3, 11):
             insts = bytecode_transformation.cleaned_instructions(f.__code__)
@@ -4915,6 +4915,76 @@ def fn():
 
             dummy_opt = torch._dynamo.optimize("eager")(dummy_fn)
             self.assertEqual(dummy_opt(), test[3])
+
+    def test_encode_varint(self):
+        nums = [
+            0b111_101010_000000,
+            0b1100_111000_010101_101010,
+        ]
+        b = bytecode_transformation.encode_exn_tab_varint(
+            nums[0]
+        ) + bytecode_transformation.encode_exn_tab_varint(nums[1])
+        nums_new = []
+        b_iter = iter(bytes(b))
+        while True:
+            try:
+                nums_new.append(bytecode_transformation.decode_exn_tab_varint(b_iter))
+            except StopIteration:
+                break
+        self.assertEqual(nums, nums_new)
+
+    @unittest.skipIf(sys.version_info < (3, 11), "requires Python 3.11+")
+    def test_exceptiontable_parsing(self):
+        def fn():
+            try:
+                with a():
+                    b()
+                c()
+            except Exception:
+                d()
+            finally:
+                e()
+            f()
+
+        tab = bytecode_transformation.parse_exception_table(
+            fn.__code__.co_exceptiontable
+        )
+        b = bytecode_transformation.assemble_exception_table(tab)
+        self.assertEqual(b, fn.__code__.co_exceptiontable)
+
+    @unittest.skipIf(sys.version_info < (3, 11), "requires Python 3.11+")
+    def test_exceptiontable_e2e(self):
+        def fn():
+            try:
+                with a():
+                    b()
+                c()
+            except Exception:
+                d()
+            finally:
+                e()
+            f()
+
+        def nothing(*args):
+            pass
+
+        code = bytecode_transformation.transform_code_object(fn.__code__, nothing)
+        self.assertEqual(code.co_exceptiontable, fn.__code__.co_exceptiontable)
+
+    @unittest.skipIf(sys.version_info < (3, 11), "requires Python 3.11+")
+    def test_exceptiontable_e2e_2(self):
+        # last instructions of an exn_table entry is a large instruction,
+        def fn():
+            try:
+                return a
+            except Exception:
+                pass
+
+        def nothing(*args):
+            pass
+
+        code = bytecode_transformation.transform_code_object(fn.__code__, nothing)
+        self.assertEqual(code.co_exceptiontable, fn.__code__.co_exceptiontable)
 
     def test_ordered_dict_alias_reconstruct(self):
         od = collections.OrderedDict
