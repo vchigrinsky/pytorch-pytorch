@@ -152,7 +152,6 @@ jobs:
           XLA_CLANG_CACHE_S3_BUCKET_NAME: ossci-compiler-clang-cache-circleci-xla
           PYTORCH_TEST_CUDA_MEM_LEAK_CHECK: ${{ matrix.mem_leak_check && '1' || '0' }}
           PYTORCH_TEST_RERUN_DISABLED_TESTS: ${{ matrix.rerun_disabled_tests && '1' || '0' }}
-          NCCL_DEBUG: "INFO"
         run: |
           set -x
 
@@ -184,6 +183,7 @@ jobs:
           # shellcheck disable=SC2086,SC2090
           container_name=$(docker run \
             ${GPU_FLAG:-} \
+            -e NCCL_DEBUG="INFO" \
             -e BUILD_ENVIRONMENT \
             -e PR_NUMBER \
             -e GITHUB_ACTIONS \
