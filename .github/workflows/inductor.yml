@@ -36,6 +36,8 @@ jobs:
         ]}
 
   linux-bionic-cuda11_8-py3_10-gcc7-inductor-test:
+    env:
+      NCCL_DEBUG: "INFO"
     name: cuda11.8-py3.10-gcc7-sm86
     uses: ./.github/workflows/_linux-test.yml
     needs: linux-bionic-cuda11_8-py3_10-gcc7-inductor-build
