@@ -103,6 +103,7 @@ class DeviceMesh(object):
         mesh: Union[torch.Tensor, "ArrayLike"],
         *,
         _init_process_groups: bool = True,
+        _sync_seed: bool = True,
     ) -> None:
         self.device_type = device_type
         self.mesh = (
