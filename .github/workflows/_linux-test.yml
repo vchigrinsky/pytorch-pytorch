@@ -154,6 +154,7 @@ jobs:
           PYTORCH_TEST_RERUN_DISABLED_TESTS: ${{ matrix.rerun_disabled_tests && '1' || '0' }}
         run: |
           set -x
+          nvidia-smi topo --matrix
 
           if [[ $TEST_CONFIG == 'multigpu' ]]; then
             TEST_COMMAND=.ci/pytorch/multigpu-test.sh
@@ -184,6 +185,8 @@ jobs:
           container_name=$(docker run \
             ${GPU_FLAG:-} \
             -e NCCL_DEBUG="INFO" \
+            -e NCCL_DEBUG_SUBSYS="INIT,P2P" \
+            -e NCCL_P2P_DISABLE=1 \
             -e BUILD_ENVIRONMENT \
             -e PR_NUMBER \
             -e GITHUB_ACTIONS \
