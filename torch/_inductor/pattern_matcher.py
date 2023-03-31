@@ -614,21 +614,26 @@ if torch._C.has_mkldnn:
     mkldnn = torch.ops.mkldnn
     _conv_args = (Arg(), Arg(), Arg(), Arg(), Arg(), Arg(), Arg())
     _linear_args = (Arg(), Arg(), Arg())
+    _conv_transpose_args = (Arg(), Arg(), Arg(), Arg(), Arg(), Arg(), Arg(), Arg())
     _computation_user_1 = [
         CallFunction(mkldnn._convolution, *_conv_args, _users=1),
         CallFunction(mkldnn._linear, *_linear_args, _users=1),
+        CallFunction(mkldnn._convolution_transpose, *_conv_transpose_args, _users=1),
     ]
     _computation_user_2 = [
         CallFunction(mkldnn._convolution, *_conv_args, _users=2),
         CallFunction(mkldnn._linear, *_linear_args, _users=2),
+        CallFunction(mkldnn._convolution_transpose, *_conv_transpose_args, _users=2),
     ]
     _computation_user_3 = [
         CallFunction(mkldnn._convolution, *_conv_args, _users=3),
         CallFunction(mkldnn._linear, *_linear_args, _users=3),
+        CallFunction(mkldnn._convolution_transpose, *_conv_transpose_args, _users=3),
     ]
     _computation_user_4 = [
         CallFunction(mkldnn._convolution, *_conv_args, _users=4),
         CallFunction(mkldnn._linear, *_linear_args, _users=4),
+        CallFunction(mkldnn._convolution_transpose, *_conv_transpose_args, _users=4),
     ]
 
     def gelu_fusion_1(computation_call):
@@ -789,10 +794,29 @@ if torch._C.has_mkldnn:
 
         return fn
 
+    def register_mkldnn_conv_transpose_replacement_pattern(unary_op, pattern):
+        @register_replacement_pattern(pattern)
+        def fn(input, weight, bias, padding, output_padding, stride, dilation, groups):
+            return torch.ops.mkldnn._convolution_transpose_pointwise(
+                input,
+                weight,
+                bias,
+                padding,
+                output_padding,
+                stride,
+                dilation,
+                groups,
+                unary_op.op_name,
+                unary_op.scalars_attr,
+                unary_op.algorithm_attr,
+            )
+
+        return fn
+
     for unary_op, patterns in replacement_unary_fusion_patterns.items():
         register_mkldnn_conv_replacement_pattern(unary_op, patterns[0])
         register_mkldnn_linear_replacement_pattern(unary_op, patterns[1])
-        # TODO: add linear/ConvTranspose fusion
+        register_mkldnn_conv_transpose_replacement_pattern(unary_op, patterns[2])
 
     @register_lowering_pattern(CallFunction(mkldnn._convolution, *_conv_args))
     def single_conv_lowering(
@@ -806,6 +830,26 @@ if torch._C.has_mkldnn:
     def single_linear_lowering(match, input, weight, bias):
         return L[torch.ops.mkldnn._linear_pointwise](
             input, weight, bias, "none", [], ""
+        )
+
+    @register_lowering_pattern(
+        CallFunction(mkldnn._convolution_transpose, *_conv_transpose_args)
+    )
+    def single_conv_transpose_lowering(
+        match, input, weight, bias, padding, output_padding, stride, dilation, groups
+    ):
+        return L[torch.ops.mkldnn._convolution_transpose_pointwise.default](
+            input,
+            weight,
+            bias,
+            padding,
+            output_padding,
+            stride,
+            dilation,
+            groups,
+            "none",
+            [],
+            "",
         )
 
     def register_leaky_relu_fusion_lowering(computation_call, computation_op):
@@ -867,9 +911,17 @@ if torch._C.has_mkldnn:
         _computation_user_3[1], torch.ops.mkldnn._linear_pointwise
     )
     register_hardtanh_fusion_lowering(
-        _computation_user_3[1], torch.ops.mkldnn._linear_pointwise
+        _computation_user_1[1], torch.ops.mkldnn._linear_pointwise
     )
-    # TODO: add ConvTranspose lowering
+    # conv_transpose_fusion lowering
+    register_leaky_relu_fusion_lowering(
+        _computation_user_3[2],
+        torch.ops.mkldnn._convolution_transpose_pointwise.default,
+    )
+    register_hardtanh_fusion_lowering(
+        _computation_user_1[2],
+        torch.ops.mkldnn._convolution_transpose_pointwise.default,
+    )
 
 
 # This slows things down:
