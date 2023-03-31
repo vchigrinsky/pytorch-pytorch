@@ -3408,6 +3408,23 @@ class CommonTemplate:
             ),
         )
 
+    def test_bitwise3(self):
+        # Repro for https://github.com/pytorch/pytorch/issues/97968
+        def fn(x, y):
+            return (
+                torch.max(torch.bitwise_and(x, y), y),
+                torch.clamp_max(torch.bitwise_or(x, y), y),
+                torch.clamp_min(torch.bitwise_xor(x, y), y),
+            )
+
+        self.common(
+            fn,
+            (
+                torch.rand([5, 10, 1]).to(torch.int8),
+                torch.rand([10, 1]).to(torch.int8),
+            ),
+        )
+
     def test_inf(self):
         def fn(a):
             return a + float("inf"), a + float("-inf"), a * -float("inf")
@@ -6119,6 +6136,9 @@ if HAS_CPU and not torch.backends.mps.is_available():
                 "randn",
                 "isnan",
                 "rand",
+                "bitwise_and",
+                "bitwise_or",
+                "bitwise_xor",
             ]
             union = {*cpp_vec_op_list, *diff}
             self.assertTrue(set(cpp_op_list).issubset(union))
