@@ -210,6 +210,8 @@ std::string _memory_snapshot_pickled() {
   IValue free_completed_s = "free_completed";
   IValue segment_alloc_s = "segment_alloc";
   IValue segment_free_s = "segment_free";
+  IValue segment_map_s = "segment_map";
+  IValue segment_unmap_s = "segment_unmap";
   IValue snapshot_s = "snapshot";
   IValue oom_s = "oom";
   IValue device_free_s = "device_free";
@@ -232,6 +234,10 @@ std::string _memory_snapshot_pickled() {
         return oom_s;
       case TraceEntry::SNAPSHOT:
         return snapshot_s;
+      case TraceEntry::SEGMENT_UNMAP:
+        return segment_unmap_s;
+      case TraceEntry::SEGMENT_MAP:
+        return segment_map_s;
     }
     throw std::runtime_error("unreachable");
   };
